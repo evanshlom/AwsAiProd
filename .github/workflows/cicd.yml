@@ -1,0 +1,194 @@
+name: Deploy to AWS
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      
+      - name: Create S3 Bucket
+        run: |
+          BUCKET_NAME="bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}"
+          aws s3 mb s3://${BUCKET_NAME} --region us-east-1 || echo "Bucket already exists"
+      
+      - name: Upload Application Files
+        run: |
+          BUCKET_NAME="bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}"
+          # Upload all app files
+          aws s3 cp app/template.yml s3://${BUCKET_NAME}/
+          aws s3 cp app/state_machine.json s3://${BUCKET_NAME}/
+          aws s3 cp app/data/train.jsonl s3://${BUCKET_NAME}/
+          aws s3 cp app/data/eval.jsonl s3://${BUCKET_NAME}/
+      
+      - name: Package Lambda Functions
+        run: |
+          cd app/functions
+          zip prepare_data.zip prepare_data.py
+          zip evaluate_model.zip evaluate_model.py
+          BUCKET_NAME="bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}"
+          aws s3 cp prepare_data.zip s3://${BUCKET_NAME}/functions/
+          aws s3 cp evaluate_model.zip s3://${BUCKET_NAME}/functions/
+          cd ../..
+      
+      - name: Deploy Lambda Functions
+        run: |
+          # Deploy prepare_data function
+          aws lambda create-function \
+            --function-name prepare-data-function \
+            --runtime python3.9 \
+            --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LambdaExecutionRole \
+            --handler prepare_data.lambda_handler \
+            --code S3Bucket=bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }},S3Key=functions/prepare_data.zip \
+            --timeout 60 \
+            || aws lambda update-function-code \
+            --function-name prepare-data-function \
+            --s3-bucket bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }} \
+            --s3-key functions/prepare_data.zip
+          
+          # Deploy evaluate_model function
+          aws lambda create-function \
+            --function-name evaluate-model-function \
+            --runtime python3.9 \
+            --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LambdaExecutionRole \
+            --handler evaluate_model.lambda_handler \
+            --code S3Bucket=bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }},S3Key=functions/evaluate_model.zip \
+            --timeout 300 \
+            || aws lambda update-function-code \
+            --function-name evaluate-model-function \
+            --s3-bucket bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }} \
+            --s3-key functions/evaluate_model.zip
+      
+      - name: Create IAM Roles
+        run: |
+          # Lambda Execution Role
+          aws iam create-role \
+            --role-name LambdaExecutionRole \
+            --assume-role-policy-document '{
+              "Version": "2012-10-17",
+              "Statement": [{
+                "Effect": "Allow",
+                "Principal": {"Service": "lambda.amazonaws.com"},
+                "Action": "sts:AssumeRole"
+              }]
+            }' || echo "Role exists"
+          
+          aws iam attach-role-policy \
+            --role-name LambdaExecutionRole \
+            --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+          
+          aws iam put-role-policy \
+            --role-name LambdaExecutionRole \
+            --policy-name BedrockAccess \
+            --policy-document '{
+              "Version": "2012-10-17",
+              "Statement": [{
+                "Effect": "Allow",
+                "Action": ["bedrock:InvokeModel", "s3:GetObject"],
+                "Resource": "*"
+              }]
+            }'
+          
+          # Bedrock Fine-Tuning Role
+          aws iam create-role \
+            --role-name BedrockFineTuningRole \
+            --assume-role-policy-document '{
+              "Version": "2012-10-17",
+              "Statement": [{
+                "Effect": "Allow",
+                "Principal": {"Service": "bedrock.amazonaws.com"},
+                "Action": "sts:AssumeRole"
+              }]
+            }' || echo "Role exists"
+          
+          aws iam put-role-policy \
+            --role-name BedrockFineTuningRole \
+            --policy-name S3Access \
+            --policy-document '{
+              "Version": "2012-10-17",
+              "Statement": [{
+                "Effect": "Allow",
+                "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Resource": [
+                  "arn:aws:s3:::bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}",
+                  "arn:aws:s3:::bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}/*"
+                ]
+              }]
+            }'
+          
+          # Step Functions Role
+          aws iam create-role \
+            --role-name StepFunctionsBedrockRole \
+            --assume-role-policy-document '{
+              "Version": "2012-10-17",
+              "Statement": [{
+                "Effect": "Allow",
+                "Principal": {"Service": "states.amazonaws.com"},
+                "Action": "sts:AssumeRole"
+              }]
+            }' || echo "Role exists"
+          
+          aws iam put-role-policy \
+            --role-name StepFunctionsBedrockRole \
+            --policy-name FullAccess \
+            --policy-document '{
+              "Version": "2012-10-17",
+              "Statement": [{
+                "Effect": "Allow",
+                "Action": [
+                  "bedrock:*",
+                  "cloudformation:*",
+                  "lambda:InvokeFunction",
+                  "iam:PassRole",
+                  "s3:*"
+                ],
+                "Resource": "*"
+              }]
+            }'
+      
+      - name: Deploy Step Functions State Machine
+        run: |
+          DEFINITION=$(cat app/state_machine.json)
+          
+          aws stepfunctions create-state-machine \
+            --name BedrockApplicationPipeline \
+            --definition "$DEFINITION" \
+            --role-arn arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/StepFunctionsBedrockRole \
+            --type STANDARD \
+            || aws stepfunctions update-state-machine \
+            --state-machine-arn arn:aws:states:us-east-1:${{ secrets.AWS_ACCOUNT_ID }}:stateMachine:BedrockApplicationPipeline \
+            --definition "$DEFINITION"
+      
+      - name: Start Pipeline Execution
+        run: |
+          EXECUTION_ARN=$(aws stepfunctions start-execution \
+            --state-machine-arn arn:aws:states:us-east-1:${{ secrets.AWS_ACCOUNT_ID }}:stateMachine:BedrockApplicationPipeline \
+            --input '{"accountId": "${{ secrets.AWS_ACCOUNT_ID }}"}' \
+            --query 'executionArn' --output text)
+          
+          echo "Pipeline started: $EXECUTION_ARN"
+          echo "Monitor progress in AWS Console > Step Functions"
+      
+      - name: Get API URL
+        run: |
+          # Wait a bit for stack creation
+          sleep 120
+          
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name bedrock-chat-stack \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
+            --output text) || echo "Stack not ready yet"
+          
+          echo "API URL: ${API_URL}"
+          echo ""
+          echo "To test the chat:"
+          echo "  export API_URL=${API_URL}"
+          echo "  cd test_chat && docker build -t chat . && docker run -it -e API_URL=${API_URL} -v ~/.aws:/root/.aws chat"

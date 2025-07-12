@@ -1,0 +1,132 @@
+{
+  "Comment": "Complete Bedrock Application Pipeline",
+  "StartAt": "DeployInfrastructure",
+  "States": {
+    "DeployInfrastructure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:cloudformation:updateStack",
+      "Parameters": {
+        "StackName": "bedrock-chat-stack",
+        "TemplateURL.$": "States.Format('https://s3.amazonaws.com/bedrock-training-data-{}/template.yml', $$.Execution.Input.accountId)",
+        "Parameters": [{
+          "ParameterKey": "ModelId",
+          "ParameterValue": "anthropic.claude-3-haiku-20240307"
+        }],
+        "Capabilities": ["CAPABILITY_IAM", "CAPABILITY_AUTO_EXPAND"]
+      },
+      "ResultPath": "$.deploymentResult",
+      "Next": "WaitForDeployment",
+      "Catch": [{
+        "ErrorEquals": ["ValidationError"],
+        "Next": "CreateStack"
+      }]
+    },
+    "CreateStack": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:cloudformation:createStack",
+      "Parameters": {
+        "StackName": "bedrock-chat-stack",
+        "TemplateURL.$": "States.Format('https://s3.amazonaws.com/bedrock-training-data-{}/template.yml', $$.Execution.Input.accountId)",
+        "Parameters": [{
+          "ParameterKey": "ModelId",
+          "ParameterValue": "anthropic.claude-3-haiku-20240307"
+        }],
+        "Capabilities": ["CAPABILITY_IAM", "CAPABILITY_AUTO_EXPAND"]
+      },
+      "ResultPath": "$.deploymentResult",
+      "Next": "WaitForDeployment"
+    },
+    "WaitForDeployment": {
+      "Type": "Wait",
+      "Seconds": 60,
+      "Next": "FineTuneModel"
+    },
+    "FineTuneModel": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::bedrock:createModelCustomizationJob.sync",
+      "Parameters": {
+        "JobName.$": "States.Format('tune-{}', $$.Execution.StartTime)",
+        "CustomModelName.$": "States.Format('allegiant-vegas-model-{}', $$.Execution.StartTime)",
+        "BaseModelIdentifier": "amazon.titan-text-lite-v1",
+        "TrainingDataConfig": {
+          "S3Uri.$": "States.Format('s3://bedrock-training-data-{}/train.jsonl', $$.Execution.Input.accountId)"
+        },
+        "ValidationDataConfig": {
+          "S3Uri.$": "States.Format('s3://bedrock-training-data-{}/eval.jsonl', $$.Execution.Input.accountId)"
+        },
+        "HyperParameters": {
+          "epochCount": "3",
+          "batchSize": "8",
+          "learningRate": "0.00001"
+        },
+        "RoleArn.$": "States.Format('arn:aws:iam::{}:role/BedrockFineTuningRole', $$.Execution.Input.accountId)"
+      },
+      "ResultPath": "$.customModel",
+      "Next": "EvaluateModel",
+      "Catch": [{
+        "ErrorEquals": ["States.ALL"],
+        "Next": "FineTuningFailed"
+      }]
+    },
+    "EvaluateModel": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "evaluate-model-function",
+        "Payload": {
+          "modelId.$": "$.customModel.CustomModelArn",
+          "testPrompts": [
+            "What events happen at Allegiant Stadium?",
+            "Tell me about pool parties in Vegas",
+            "Plan a budget weekend trip"
+          ]
+        }
+      },
+      "ResultPath": "$.evaluationResult",
+      "Next": "CheckEvaluation",
+      "Retry": [{
+        "ErrorEquals": ["States.ALL"],
+        "IntervalSeconds": 30,
+        "MaxAttempts": 3,
+        "BackoffRate": 2
+      }]
+    },
+    "CheckEvaluation": {
+      "Type": "Choice",
+      "Choices": [{
+        "Variable": "$.evaluationResult.Payload.passed",
+        "BooleanEquals": true,
+        "Next": "UpdateModelInProduction"
+      }],
+      "Default": "EvaluationFailed"
+    },
+    "UpdateModelInProduction": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:cloudformation:updateStack",
+      "Parameters": {
+        "StackName": "bedrock-chat-stack",
+        "UsePreviousTemplate": true,
+        "Parameters": [{
+          "ParameterKey": "ModelId",
+          "ParameterValue.$": "$.customModel.CustomModelArn"
+        }],
+        "Capabilities": ["CAPABILITY_IAM", "CAPABILITY_AUTO_EXPAND"]
+      },
+      "ResultPath": "$.updateResult",
+      "Next": "DeploymentComplete"
+    },
+    "DeploymentComplete": {
+      "Type": "Pass",
+      "Result": "Deployment successful with fine-tuned model",
+      "End": true
+    },
+    "FineTuningFailed": {
+      "Type": "Fail",
+      "Cause": "Fine-tuning job failed"
+    },
+    "EvaluationFailed": {
+      "Type": "Fail",
+      "Cause": "Model evaluation did not pass"
+    }
+  }
+}
