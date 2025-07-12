@@ -69,7 +69,7 @@ jobs:
               "Version": "2012-10-17",
               "Statement": [{
                 "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Action": ["s3:GetObject", "s3:ListBucket", "s3:PutObject"],
                 "Resource": [
                   "arn:aws:s3:::bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}",
                   "arn:aws:s3:::bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}/*"
