@@ -20,53 +20,6 @@ jobs:
           BUCKET_NAME="bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}"
           aws s3 mb s3://${BUCKET_NAME} --region us-east-1 || echo "Bucket already exists"
       
-      - name: Upload Application Files
-        run: |
-          BUCKET_NAME="bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}"
-          # Upload all app files
-          aws s3 cp app/template.yml s3://${BUCKET_NAME}/
-          aws s3 cp app/state_machine.json s3://${BUCKET_NAME}/
-          aws s3 cp app/data/train.jsonl s3://${BUCKET_NAME}/
-          aws s3 cp app/data/eval.jsonl s3://${BUCKET_NAME}/
-      
-      - name: Package Lambda Functions
-        run: |
-          cd app/functions
-          zip prepare_data.zip prepare_data.py
-          zip evaluate_model.zip evaluate_model.py
-          BUCKET_NAME="bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}"
-          aws s3 cp prepare_data.zip s3://${BUCKET_NAME}/functions/
-          aws s3 cp evaluate_model.zip s3://${BUCKET_NAME}/functions/
-          cd ../..
-      
-      - name: Deploy Lambda Functions
-        run: |
-          # Deploy prepare_data function
-          aws lambda create-function \
-            --function-name prepare-data-function \
-            --runtime python3.9 \
-            --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LambdaExecutionRole \
-            --handler prepare_data.lambda_handler \
-            --code S3Bucket=bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }},S3Key=functions/prepare_data.zip \
-            --timeout 60 \
-            || aws lambda update-function-code \
-            --function-name prepare-data-function \
-            --s3-bucket bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }} \
-            --s3-key functions/prepare_data.zip
-          
-          # Deploy evaluate_model function
-          aws lambda create-function \
-            --function-name evaluate-model-function \
-            --runtime python3.9 \
-            --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LambdaExecutionRole \
-            --handler evaluate_model.lambda_handler \
-            --code S3Bucket=bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }},S3Key=functions/evaluate_model.zip \
-            --timeout 300 \
-            || aws lambda update-function-code \
-            --function-name evaluate-model-function \
-            --s3-bucket bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }} \
-            --s3-key functions/evaluate_model.zip
-      
       - name: Create IAM Roles
         run: |
           # Lambda Execution Role
@@ -153,6 +106,56 @@ jobs:
                 "Resource": "*"
               }]
             }'
+          
+          # Wait for IAM propagation
+          sleep 10
+      
+      - name: Upload Application Files
+        run: |
+          BUCKET_NAME="bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}"
+          # Upload all app files
+          aws s3 cp app/template.yml s3://${BUCKET_NAME}/
+          aws s3 cp app/state_machine.json s3://${BUCKET_NAME}/
+          aws s3 cp app/data/train.jsonl s3://${BUCKET_NAME}/
+          aws s3 cp app/data/eval.jsonl s3://${BUCKET_NAME}/
+      
+      - name: Package Lambda Functions
+        run: |
+          cd app/functions
+          zip prepare_data.zip prepare_data.py
+          zip evaluate_model.zip evaluate_model.py
+          BUCKET_NAME="bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}"
+          aws s3 cp prepare_data.zip s3://${BUCKET_NAME}/functions/
+          aws s3 cp evaluate_model.zip s3://${BUCKET_NAME}/functions/
+          cd ../..
+      
+      - name: Deploy Lambda Functions
+        run: |
+          # Deploy prepare_data function
+          aws lambda create-function \
+            --function-name prepare-data-function \
+            --runtime python3.9 \
+            --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LambdaExecutionRole \
+            --handler prepare_data.lambda_handler \
+            --code S3Bucket=bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }},S3Key=functions/prepare_data.zip \
+            --timeout 60 \
+            || aws lambda update-function-code \
+            --function-name prepare-data-function \
+            --s3-bucket bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }} \
+            --s3-key functions/prepare_data.zip
+          
+          # Deploy evaluate_model function
+          aws lambda create-function \
+            --function-name evaluate-model-function \
+            --runtime python3.9 \
+            --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LambdaExecutionRole \
+            --handler evaluate_model.lambda_handler \
+            --code S3Bucket=bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }},S3Key=functions/evaluate_model.zip \
+            --timeout 300 \
+            || aws lambda update-function-code \
+            --function-name evaluate-model-function \
+            --s3-bucket bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }} \
+            --s3-key functions/evaluate_model.zip
       
       - name: Deploy Step Functions State Machine
         run: |
