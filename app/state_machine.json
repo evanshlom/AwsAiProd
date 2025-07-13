@@ -19,7 +19,7 @@
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": {
-        "FunctionName": "create-sagemaker-pipeline",
+        "FunctionName": "start-fine-tuning-function",
         "Payload": {
           "accountId.$": "$$.Execution.Input.accountId",
           "timestamp.$": "$$.Execution.StartTime"
@@ -37,7 +37,7 @@
       "Type": "Task", 
       "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": {
-        "FunctionName": "check-fine-tuning-status",
+        "FunctionName": "check-fine-tuning-status-function",
         "Payload": {
           "jobArn.$": "$.fineTuningJob.Payload.jobArn"
         }

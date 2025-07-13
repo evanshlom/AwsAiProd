@@ -121,13 +121,13 @@ jobs:
           cd app/functions
           zip prepare_data.zip prepare_data.py
           zip evaluate_model.zip evaluate_model.py
-          zip create_sagemaker_pipeline.zip create_sagemaker_pipeline.py
+          zip start_fine_tuning.zip start_fine_tuning.py
           zip check_fine_tuning_status.zip check_fine_tuning_status.py
           zip deploy_infrastructure.zip deploy_infrastructure.py
           BUCKET_NAME="llm-training-data-${{ secrets.AWS_ACCOUNT_ID }}"
           aws s3 cp prepare_data.zip s3://${BUCKET_NAME}/functions/
           aws s3 cp evaluate_model.zip s3://${BUCKET_NAME}/functions/
-          aws s3 cp create_sagemaker_pipeline.zip s3://${BUCKET_NAME}/functions/
+          aws s3 cp start_fine_tuning.zip s3://${BUCKET_NAME}/functions/
           aws s3 cp check_fine_tuning_status.zip s3://${BUCKET_NAME}/functions/
           aws s3 cp deploy_infrastructure.zip s3://${BUCKET_NAME}/functions/
           cd ../..
@@ -135,7 +135,7 @@ jobs:
       - name: Deploy Lambda Functions
         run: |
           # Deploy all Lambda functions
-          for func in prepare-data evaluate-model create-sagemaker-pipeline check-fine-tuning-status deploy-infrastructure; do
+          for func in prepare-data evaluate-model start-fine-tuning check-fine-tuning-status deploy-infrastructure; do
             aws lambda create-function \
               --function-name ${func}-function \
               --runtime python3.9 \
