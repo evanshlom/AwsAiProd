@@ -19,9 +19,6 @@ def lambda_handler(event, context):
         trainingDataConfig={
             "s3Uri": f"s3://llm-training-data-{account_id}/train.jsonl"
         },
-        validationDataConfig={
-            "s3Uri": f"s3://llm-training-data-{account_id}/eval.jsonl"  
-        },
         outputDataConfig={
             "s3Uri": f"s3://llm-training-data-{account_id}/output/"
         },
