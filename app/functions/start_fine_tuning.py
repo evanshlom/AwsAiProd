@@ -18,7 +18,7 @@ def lambda_handler(event, context):
     response = bedrock.create_model_customization_job(
         jobName=training_job_name,
         customModelName=custom_model_name,
-        baseModelIdentifier="amazon.titan-text-g1-express",
+        baseModelIdentifier="arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-text-g1-express",
         trainingDataConfig={
             "s3Uri": f"s3://llm-training-data-{account_id}/train.jsonl"
         },
