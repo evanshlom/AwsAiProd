@@ -45,24 +45,18 @@
       "Type": "Task",
       "Resource": "arn:aws:states:::bedrock:createModelCustomizationJob.sync",
       "Parameters": {
-        "JobName.$": "States.Format('tune-{}', $$.Execution.StartTime)",
-        "CustomModelName.$": "States.Format('allegiant-vegas-model-{}', $$.Execution.StartTime)",
+        "JobName.$": "States.Format('tune-{}', $.Execution.StartTime)",
+        "CustomModelName.$": "States.Format('allegiant-vegas-model-{}', $.Execution.StartTime)",
         "BaseModelIdentifier": "amazon.titan-text-lite-v1",
-        "TrainingDataConfig": {
-          "S3Uri.$": "States.Format('s3://bedrock-training-data-{}/train.jsonl', $$.Execution.Input.accountId)"
-        },
-        "ValidationDataConfig": {
-          "S3Uri.$": "States.Format('s3://bedrock-training-data-{}/eval.jsonl', $$.Execution.Input.accountId)"
-        },
-        "OutputDataConfig": {
-          "S3Uri.$": "States.Format('s3://bedrock-training-data-{}/output/', $$.Execution.Input.accountId)"
-        },
+        "TrainingDataUri.$": "States.Format('s3://bedrock-training-data-{}/train.jsonl', $.Execution.Input.accountId)",
+        "ValidationDataUri.$": "States.Format('s3://bedrock-training-data-{}/eval.jsonl', $.Execution.Input.accountId)",
+        "OutputDataUri.$": "States.Format('s3://bedrock-training-data-{}/output/', $.Execution.Input.accountId)",
         "HyperParameters": {
           "epochCount": "3",
           "batchSize": "8",
           "learningRate": "0.00001"
         },
-        "RoleArn.$": "States.Format('arn:aws:iam::{}:role/BedrockFineTuningRole', $$.Execution.Input.accountId)"
+        "RoleArn.$": "States.Format('arn:aws:iam::{}:role/BedrockFineTuningRole', $.Execution.Input.accountId)"
       },
       "ResultPath": "$.customModel",
       "Next": "EvaluateModel",
