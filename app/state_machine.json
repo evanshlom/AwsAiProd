@@ -26,7 +26,7 @@
       "Resource": "arn:aws:states:::aws-sdk:cloudformation:updateStack",
       "Parameters": {
         "StackName": "bedrock-chat-stack",
-        "TemplateURL.$": "States.Format('https://s3.amazonaws.com/bedrock-training-data-{}/template.yml', $$.Execution.Input.accountId)",
+        "TemplateURL.$": "States.Format('https://s3.amazonaws.com/bedrock-training-data-{}/template.yml', $.Execution.Input.accountId)",
         "Parameters": [{
           "ParameterKey": "ModelId",
           "ParameterValue": "anthropic.claude-3-haiku-20240307"
@@ -34,7 +34,25 @@
         "Capabilities": ["CAPABILITY_IAM", "CAPABILITY_AUTO_EXPAND"]
       },
       "ResultPath": "$.deploymentResult",
-      "Next": "WaitForDeployment"
+      "Next": "WaitForDeployment",
+      "Catch": [{
+        "ErrorEquals": ["CloudFormation.CloudFormationException"],
+        "ResultPath": "$.updateError",
+        "Next": "DeleteAndRecreateStack"
+      }]
+    },
+    "DeleteAndRecreateStack": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:cloudformation:deleteStack",
+      "Parameters": {
+        "StackName": "bedrock-chat-stack"
+      },
+      "Next": "WaitForDeletion"
+    },
+    "WaitForDeletion": {
+      "Type": "Wait",
+      "Seconds": 120,
+      "Next": "DeployInfrastructure"
     },
     "WaitForDeployment": {
       "Type": "Wait",
