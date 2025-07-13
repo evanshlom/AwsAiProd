@@ -39,7 +39,7 @@
     "WaitForDeployment": {
       "Type": "Wait",
       "Seconds": 60,
-      "Next": "FineTuneModel"
+      "Next": "PrepareFineTuningParams"
     },
     "FineTuneModel": {
       "Type": "Task",
