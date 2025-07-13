@@ -18,6 +18,7 @@
       "Next": "WaitForDeployment",
       "Catch": [{
         "ErrorEquals": ["CloudFormation.AlreadyExistsException"],
+        "ResultPath": "$.createError",
         "Next": "UpdateStack"
       }]
     },
