@@ -10,11 +10,14 @@ def lambda_handler(event, context):
     timestamp = event['timestamp']
     
     # Create fine-tuning job
-    training_job_name = f"llm-tune-{timestamp}"
+    # Convert timestamp to valid format (remove colons and dots)
+    clean_timestamp = timestamp.replace(':', '-').replace('.', '-').replace('T', '-').replace('Z', '')
+    training_job_name = f"llm-tune-{clean_timestamp}"
+    custom_model_name = f"allegiant-vegas-model-{clean_timestamp}"
     
     response = bedrock.create_model_customization_job(
         jobName=training_job_name,
-        customModelName=f"allegiant-vegas-model-{timestamp}",
+        customModelName=custom_model_name,
         baseModelIdentifier="amazon.titan-text-lite-v1",
         trainingDataConfig={
             "s3Uri": f"s3://llm-training-data-{account_id}/train.jsonl"

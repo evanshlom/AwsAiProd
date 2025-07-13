@@ -1,6 +1,7 @@
 import boto3
 import json
 import time
+from botocore.exceptions import ClientError
 
 def lambda_handler(event, context):
     """
@@ -13,6 +14,21 @@ def lambda_handler(event, context):
     
     stack_name = 'llm-chat-stack'
     template_url = f'https://s3.amazonaws.com/llm-training-data-{account_id}/template.yml'
+    
+    # Check if stack exists and its status
+    try:
+        stacks = cf.describe_stacks(StackName=stack_name)
+        stack_status = stacks['Stacks'][0]['StackStatus']
+        
+        if stack_status in ['ROLLBACK_COMPLETE', 'ROLLBACK_FAILED']:
+            # Delete the failed stack
+            cf.delete_stack(StackName=stack_name)
+            # Wait for deletion
+            waiter = cf.get_waiter('stack_delete_complete')
+            waiter.wait(StackName=stack_name)
+    except ClientError as e:
+        if 'does not exist' not in str(e):
+            raise
     
     parameters = [{
         'ParameterKey': 'ModelId',
