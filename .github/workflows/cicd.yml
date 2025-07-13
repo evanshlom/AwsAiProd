@@ -1,9 +1,4 @@
-- name: Package and Deploy Infrastructure
-        run: |
-          cd app
-          sam package --s3-bucket bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }} --output-template-file packaged.yml
-          sam deploy --template-file packaged.yml --stack-name bedrock-chat-stack --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset
-          cd ..name: Deploy to AWS
+name: Deploy to AWS
 on:
   push:
     branches: [main]
@@ -50,7 +45,7 @@ jobs:
               "Version": "2012-10-17",
               "Statement": [{
                 "Effect": "Allow",
-                "Action": ["bedrock:InvokeModel", "s3:GetObject"],
+                "Action": ["bedrock:*", "s3:*", "cloudformation:*"],
                 "Resource": "*"
               }]
             }'
@@ -102,11 +97,8 @@ jobs:
               "Statement": [{
                 "Effect": "Allow",
                 "Action": [
-                  "bedrock:*",
-                  "cloudformation:*",
                   "lambda:InvokeFunction",
-                  "iam:PassRole",
-                  "s3:*"
+                  "iam:PassRole"
                 ],
                 "Resource": "*"
               }]
