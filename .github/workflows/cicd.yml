@@ -1,4 +1,9 @@
-name: Deploy to AWS
+- name: Package and Deploy Infrastructure
+        run: |
+          cd app
+          sam package --s3-bucket bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }} --output-template-file packaged.yml
+          sam deploy --template-file packaged.yml --stack-name bedrock-chat-stack --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset
+          cd ..name: Deploy to AWS
 on:
   push:
     branches: [main]
@@ -17,7 +22,7 @@ jobs:
       
       - name: Create S3 Bucket
         run: |
-          BUCKET_NAME="bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}"
+          BUCKET_NAME="llm-training-data-${{ secrets.AWS_ACCOUNT_ID }}"
           aws s3 mb s3://${BUCKET_NAME} --region us-east-1 || echo "Bucket already exists"
       
       - name: Create IAM Roles
@@ -71,8 +76,8 @@ jobs:
                 "Effect": "Allow",
                 "Action": ["s3:GetObject", "s3:ListBucket", "s3:PutObject"],
                 "Resource": [
-                  "arn:aws:s3:::bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}",
-                  "arn:aws:s3:::bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}/*"
+                  "arn:aws:s3:::llm-training-data-${{ secrets.AWS_ACCOUNT_ID }}",
+                  "arn:aws:s3:::llm-training-data-${{ secrets.AWS_ACCOUNT_ID }}/*"
                 ]
               }]
             }'
@@ -112,7 +117,7 @@ jobs:
       
       - name: Upload Application Files
         run: |
-          BUCKET_NAME="bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}"
+          BUCKET_NAME="llm-training-data-${{ secrets.AWS_ACCOUNT_ID }}"
           # Upload all app files
           aws s3 cp app/template.yml s3://${BUCKET_NAME}/
           aws s3 cp app/state_machine.json s3://${BUCKET_NAME}/
@@ -124,56 +129,52 @@ jobs:
           cd app/functions
           zip prepare_data.zip prepare_data.py
           zip evaluate_model.zip evaluate_model.py
-          BUCKET_NAME="bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }}"
+          zip create_sagemaker_pipeline.zip create_sagemaker_pipeline.py
+          zip check_fine_tuning_status.zip check_fine_tuning_status.py
+          zip deploy_infrastructure.zip deploy_infrastructure.py
+          BUCKET_NAME="llm-training-data-${{ secrets.AWS_ACCOUNT_ID }}"
           aws s3 cp prepare_data.zip s3://${BUCKET_NAME}/functions/
           aws s3 cp evaluate_model.zip s3://${BUCKET_NAME}/functions/
+          aws s3 cp create_sagemaker_pipeline.zip s3://${BUCKET_NAME}/functions/
+          aws s3 cp check_fine_tuning_status.zip s3://${BUCKET_NAME}/functions/
+          aws s3 cp deploy_infrastructure.zip s3://${BUCKET_NAME}/functions/
           cd ../..
       
       - name: Deploy Lambda Functions
         run: |
-          # Deploy prepare_data function
-          aws lambda create-function \
-            --function-name prepare-data-function \
-            --runtime python3.9 \
-            --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LambdaExecutionRole \
-            --handler prepare_data.lambda_handler \
-            --code S3Bucket=bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }},S3Key=functions/prepare_data.zip \
-            --timeout 60 \
-            || aws lambda update-function-code \
-            --function-name prepare-data-function \
-            --s3-bucket bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }} \
-            --s3-key functions/prepare_data.zip
-          
-          # Deploy evaluate_model function
-          aws lambda create-function \
-            --function-name evaluate-model-function \
-            --runtime python3.9 \
-            --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LambdaExecutionRole \
-            --handler evaluate_model.lambda_handler \
-            --code S3Bucket=bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }},S3Key=functions/evaluate_model.zip \
-            --timeout 300 \
-            || aws lambda update-function-code \
-            --function-name evaluate-model-function \
-            --s3-bucket bedrock-training-data-${{ secrets.AWS_ACCOUNT_ID }} \
-            --s3-key functions/evaluate_model.zip
+          # Deploy all Lambda functions
+          for func in prepare-data evaluate-model create-sagemaker-pipeline check-fine-tuning-status deploy-infrastructure; do
+            aws lambda create-function \
+              --function-name ${func}-function \
+              --runtime python3.9 \
+              --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/LambdaExecutionRole \
+              --handler ${func//-/_}.lambda_handler \
+              --code S3Bucket=llm-training-data-${{ secrets.AWS_ACCOUNT_ID }},S3Key=functions/${func//-/_}.zip \
+              --timeout 300 \
+              --memory-size 512 \
+              || aws lambda update-function-code \
+              --function-name ${func}-function \
+              --s3-bucket llm-training-data-${{ secrets.AWS_ACCOUNT_ID }} \
+              --s3-key functions/${func//-/_}.zip
+          done
       
       - name: Deploy Step Functions State Machine
         run: |
           DEFINITION=$(cat app/state_machine.json)
           
           aws stepfunctions create-state-machine \
-            --name BedrockApplicationPipeline \
+            --name LLMApplicationPipeline \
             --definition "$DEFINITION" \
             --role-arn arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/StepFunctionsBedrockRole \
             --type STANDARD \
             || aws stepfunctions update-state-machine \
-            --state-machine-arn arn:aws:states:us-east-1:${{ secrets.AWS_ACCOUNT_ID }}:stateMachine:BedrockApplicationPipeline \
+            --state-machine-arn arn:aws:states:us-east-1:${{ secrets.AWS_ACCOUNT_ID }}:stateMachine:LLMApplicationPipeline \
             --definition "$DEFINITION"
       
       - name: Start Pipeline Execution
         run: |
           EXECUTION_ARN=$(aws stepfunctions start-execution \
-            --state-machine-arn arn:aws:states:us-east-1:${{ secrets.AWS_ACCOUNT_ID }}:stateMachine:BedrockApplicationPipeline \
+            --state-machine-arn arn:aws:states:us-east-1:${{ secrets.AWS_ACCOUNT_ID }}:stateMachine:LLMApplicationPipeline \
             --input '{"accountId": "${{ secrets.AWS_ACCOUNT_ID }}"}' \
             --query 'executionArn' --output text)
           
@@ -186,7 +187,7 @@ jobs:
           sleep 120
           
           API_URL=$(aws cloudformation describe-stacks \
-            --stack-name bedrock-chat-stack \
+            --stack-name llm-chat-stack \
             --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
             --output text) || echo "Stack not ready yet"
           
