@@ -45,7 +45,7 @@ jobs:
               "Version": "2012-10-17",
               "Statement": [{
                 "Effect": "Allow",
-                "Action": ["bedrock:*", "s3:*", "cloudformation:*"],
+                "Action": ["bedrock:*", "s3:*", "cloudformation:*", "iam:PassRole"],
                 "Resource": "*"
               }]
             }'
