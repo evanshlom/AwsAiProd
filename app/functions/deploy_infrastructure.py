@@ -16,9 +16,11 @@ def lambda_handler(event, context):
     template_url = f'https://s3.amazonaws.com/llm-training-data-{account_id}/template.yml'
     
     # Check if stack exists and its status
+    stack_exists = False
     try:
         stacks = cf.describe_stacks(StackName=stack_name)
         stack_status = stacks['Stacks'][0]['StackStatus']
+        stack_exists = True
         
         if stack_status in ['ROLLBACK_COMPLETE', 'ROLLBACK_FAILED']:
             # Delete the failed stack
@@ -26,6 +28,7 @@ def lambda_handler(event, context):
             # Wait for deletion
             waiter = cf.get_waiter('stack_delete_complete')
             waiter.wait(StackName=stack_name)
+            stack_exists = False
     except ClientError as e:
         if 'does not exist' not in str(e):
             raise
@@ -36,27 +39,18 @@ def lambda_handler(event, context):
     }]
     
     try:
-        if action == 'deploy':
-            # Try to create stack
-            try:
-                cf.create_stack(
-                    StackName=stack_name,
-                    TemplateURL=template_url,
-                    Parameters=parameters,
-                    Capabilities=['CAPABILITY_IAM', 'CAPABILITY_AUTO_EXPAND']
-                )
-                # Wait for creation to start
-                time.sleep(5)
-            except cf.exceptions.AlreadyExistsException:
-                # Stack exists, update it
-                cf.update_stack(
-                    StackName=stack_name,
-                    TemplateURL=template_url,
-                    Parameters=parameters,
-                    Capabilities=['CAPABILITY_IAM', 'CAPABILITY_AUTO_EXPAND']
-                )
+        if action == 'deploy' or not stack_exists:
+            # Create stack
+            cf.create_stack(
+                StackName=stack_name,
+                TemplateURL=template_url,
+                Parameters=parameters,
+                Capabilities=['CAPABILITY_IAM', 'CAPABILITY_AUTO_EXPAND']
+            )
+            # Wait for creation to start
+            time.sleep(5)
         else:
-            # Update with new model
+            # Update existing stack
             cf.update_stack(
                 StackName=stack_name,
                 UsePreviousTemplate=True,
@@ -75,10 +69,31 @@ def lambda_handler(event, context):
             'outputs': {o['OutputKey']: o['OutputValue'] for o in outputs}
         }
         
-    except Exception as e:
-        # If stack is in bad state, delete and recreate
-        if 'ROLLBACK_COMPLETE' in str(e):
-            cf.delete_stack(StackName=stack_name)
-            time.sleep(60)
-            return lambda_handler(event, context)  # Retry
-        raise e
+    except ClientError as e:
+        if 'AlreadyExistsException' in str(e):
+            # Stack exists, update it
+            cf.update_stack(
+                StackName=stack_name,
+                TemplateURL=template_url,
+                Parameters=parameters,
+                Capabilities=['CAPABILITY_IAM', 'CAPABILITY_AUTO_EXPAND']
+            )
+            time.sleep(10)
+            response = cf.describe_stacks(StackName=stack_name)
+            outputs = response['Stacks'][0].get('Outputs', [])
+            return {
+                'statusCode': 200,
+                'stackName': stack_name,
+                'outputs': {o['OutputKey']: o['OutputValue'] for o in outputs}
+            }
+        elif 'No updates are to be performed' in str(e):
+            # No changes needed
+            response = cf.describe_stacks(StackName=stack_name)
+            outputs = response['Stacks'][0].get('Outputs', [])
+            return {
+                'statusCode': 200,
+                'stackName': stack_name,
+                'outputs': {o['OutputKey']: o['OutputValue'] for o in outputs}
+            }
+        else:
+            raise e
