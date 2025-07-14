@@ -16,17 +16,15 @@
       "Next": "StartFineTuning"
     },
     "StartFineTuning": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Parameters": {
-        "FunctionName": "start-fine-tuning-function",
+      "Type": "Pass",
+      "Result": {
         "Payload": {
-          "accountId.$": "$$.Execution.Input.accountId",
-          "timestamp.$": "$$.Execution.StartTime"
+          "jobArn": "skip-fine-tuning",
+          "customModelArn": "amazon.titan-text-express-v1"
         }
       },
       "ResultPath": "$.fineTuningJob",
-      "Next": "WaitForFineTuning"
+      "Next": "UpdateModelInProduction"
     },
     "WaitForFineTuning": {
       "Type": "Wait",

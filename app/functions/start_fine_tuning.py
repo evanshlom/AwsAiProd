@@ -26,8 +26,8 @@ def lambda_handler(event, context):
             "s3Uri": f"s3://llm-training-data-{account_id}/output/"
         },
         hyperParameters={
-            "epochCount": "3",
-            "batchSize": "8", 
+            "epochCount": "1",
+            "batchSize": "1", 
             "learningRate": "0.00001"
         },
         roleArn=f"arn:aws:iam::{account_id}:role/BedrockFineTuningRole"
