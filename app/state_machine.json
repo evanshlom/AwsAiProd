@@ -88,9 +88,9 @@
       "Parameters": {
         "FunctionName": "deploy-infrastructure-function",
         "Payload": {
-          "accountId.$": "$$.Execution.Input.accountId",
+          "accountId.$": "$.Execution.Input.accountId",
           "action": "update",
-          "modelId.$": "$.jobStatus.Payload.customModelArn"
+          "modelId.$": "$.fineTuningJob.Payload.customModelArn"
         }
       },
       "ResultPath": "$.updateResult",
