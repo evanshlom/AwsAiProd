@@ -18,7 +18,7 @@ Resources:
   ChatFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: .
+      CodeUri: !Sub s3://llm-training-data-${AWS::AccountId}/lambda_function.zip
       Handler: lambda_function.lambda_handler
       Runtime: python3.9
       Timeout: 30
