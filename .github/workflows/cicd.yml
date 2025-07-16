@@ -115,6 +115,13 @@ jobs:
           aws s3 cp app/state_machine.json s3://${BUCKET_NAME}/
           aws s3 cp app/data/train.jsonl s3://${BUCKET_NAME}/
           aws s3 cp app/data/eval.jsonl s3://${BUCKET_NAME}/
+
+      - name: Package Chat Lambda
+        run: |
+          cd app
+          zip lambda_function.zip lambda_function.py
+          aws s3 cp lambda_function.zip s3://llm-training-data-${{ secrets.AWS_ACCOUNT_ID }}/
+          cd ..
       
       - name: Package Lambda Functions
         run: |
