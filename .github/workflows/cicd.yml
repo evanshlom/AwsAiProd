@@ -25,14 +25,8 @@ jobs:
           # Lambda Execution Role
           aws iam create-role \
             --role-name LambdaExecutionRole \
-            --assume-role-policy-document '{
-              "Version": "2012-10-17",
-              "Statement": [{
-                "Effect": "Allow",
-                "Principal": {"Service": "lambda.amazonaws.com"},
-                "Action": "sts:AssumeRole"
-              }]
-            }' || echo "Role exists"
+            --assume-role-policy-document file://.github/policies/lambda-trust-policy.json \
+            || echo "Role exists"
           
           aws iam attach-role-policy \
             --role-name LambdaExecutionRole \
@@ -41,68 +35,29 @@ jobs:
           aws iam put-role-policy \
             --role-name LambdaExecutionRole \
             --policy-name BedrockAccess \
-            --policy-document '{
-              "Version": "2012-10-17",
-              "Statement": [{
-                "Effect": "Allow",
-                "Action": ["bedrock:*", "s3:*", "cloudformation:*", "iam:PassRole"],
-                "Resource": "*"
-              }]
-            }'
+            --policy-document file://.github/policies/lambda-execution-policy.json
           
           # Bedrock Fine-Tuning Role
           aws iam create-role \
             --role-name BedrockFineTuningRole \
-            --assume-role-policy-document '{
-              "Version": "2012-10-17",
-              "Statement": [{
-                "Effect": "Allow",
-                "Principal": {"Service": "bedrock.amazonaws.com"},
-                "Action": "sts:AssumeRole"
-              }]
-            }' || echo "Role exists"
+            --assume-role-policy-document file://.github/policies/bedrock-trust-policy.json \
+            || echo "Role exists"
           
           aws iam put-role-policy \
             --role-name BedrockFineTuningRole \
             --policy-name S3Access \
-            --policy-document '{
-              "Version": "2012-10-17",
-              "Statement": [{
-                "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket", "s3:PutObject"],
-                "Resource": [
-                  "arn:aws:s3:::llm-training-data-${{ secrets.AWS_ACCOUNT_ID }}",
-                  "arn:aws:s3:::llm-training-data-${{ secrets.AWS_ACCOUNT_ID }}/*"
-                ]
-              }]
-            }'
+            --policy-document file://.github/policies/bedrock-finetuning-policy.json
           
           # Step Functions Role
           aws iam create-role \
             --role-name StepFunctionsBedrockRole \
-            --assume-role-policy-document '{
-              "Version": "2012-10-17",
-              "Statement": [{
-                "Effect": "Allow",
-                "Principal": {"Service": "states.amazonaws.com"},
-                "Action": "sts:AssumeRole"
-              }]
-            }' || echo "Role exists"
+            --assume-role-policy-document file://.github/policies/stepfunctions-trust-policy.json \
+            || echo "Role exists"
           
           aws iam put-role-policy \
             --role-name StepFunctionsBedrockRole \
             --policy-name FullAccess \
-            --policy-document '{
-              "Version": "2012-10-17",
-              "Statement": [{
-                "Effect": "Allow",
-                "Action": [
-                  "lambda:InvokeFunction",
-                  "iam:PassRole"
-                ],
-                "Resource": "*"
-              }]
-            }'
+            --policy-document file://.github/policies/stepfunctions-policy.json
           
           # Wait for IAM propagation
           sleep 10

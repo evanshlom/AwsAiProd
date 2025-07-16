@@ -1,0 +1,25 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": [
+      "bedrock:*",
+      "s3:*",
+      "cloudformation:*",
+      "iam:CreateRole",
+      "iam:DeleteRole",
+      "iam:AttachRolePolicy",
+      "iam:DetachRolePolicy",
+      "iam:PutRolePolicy",
+      "iam:DeleteRolePolicy",
+      "iam:GetRole",
+      "iam:GetRolePolicy",
+      "iam:PassRole",
+      "iam:TagRole",
+      "lambda:*",
+      "apigateway:*",
+      "dynamodb:*"
+    ],
+    "Resource": "*"
+  }]
+}

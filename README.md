@@ -46,6 +46,13 @@ AwsAiProd/
 ├── .github/
 │   └── workflows/
 │       └── cicd.yml           # GitHub Actions deployment
+│   └── policies/
+│       ├── lambda-trust-policy.json
+│       ├── lambda-execution-policy.json
+│       ├── bedrock-trust-policy.json
+│       ├── bedrock-finetuning-policy.json
+│       ├── stepfunctions-trust-policy.json
+│       └── stepfunctions-policy.json
 └── .gitignore
 
 ```
