@@ -9,31 +9,37 @@ table = dynamodb.Table('ConversationHistory')
 def lambda_handler(event, context):
     try:
         # Get model ID from environment variable (updated by Step Functions)
-        model_id = os.environ.get('MODEL_ID', 'anthropic.claude-3-haiku-20240307')
+        model_id = os.environ.get('MODEL_ID', 'amazon.titan-text-express-v1')
         
         body = json.loads(event['body'])
         prompt = body.get('prompt', '')
         history = body.get('history', [])
         session_id = body.get('session_id')
         
-        # Build messages array with history
-        messages = []
+        # Build conversation text for Titan
+        conversation_text = ""
         for msg in history[-10:]:  # Last 10 messages
-            messages.append(msg)
-        messages.append({"role": "user", "content": prompt})
+            if isinstance(msg, dict):
+                role = msg.get('role', 'user')
+                content = msg.get('content', '')
+                conversation_text += f"{role}: {content}\n"
+        conversation_text += f"user: {prompt}\nassistant:"
         
-        # Call Bedrock
+        # Call Bedrock with Titan format
         response = bedrock.invoke_model(
             modelId=model_id,
             body=json.dumps({
-                "messages": messages,
-                "max_tokens": 1000,
-                "anthropic_version": "bedrock-2023-05-31"
+                "inputText": conversation_text,
+                "textGenerationConfig": {
+                    "maxTokenCount": 512,
+                    "temperature": 0.7,
+                    "topP": 0.9
+                }
             })
         )
         
         response_body = json.loads(response['body'].read())
-        assistant_message = response_body['content'][0]['text']
+        assistant_message = response_body['results'][0]['outputText']
         
         # Save to DynamoDB if session_id provided
         if session_id:
