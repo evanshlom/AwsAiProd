@@ -4,8 +4,15 @@ Transform: AWS::Serverless-2016-10-31
 Parameters:
   ModelId:
     Type: String
-    Default: anthropic.claude-3-haiku-20240307
+    Default: amazon.titan-text-express-v1
     Description: Bedrock model ID to use
+
+Globals:
+  Api:
+    Cors:
+      AllowOrigin: "'*'"
+      AllowHeaders: "'Content-Type'"
+      AllowMethods: "'POST, OPTIONS'"
 
 Resources:
   ChatFunction:
@@ -38,10 +45,6 @@ Resources:
           Properties:
             Path: /chat
             Method: post
-            Cors:
-              AllowOrigin: "'*'"
-              AllowHeaders: "'Content-Type'"
-              AllowMethods: "'POST, OPTIONS'"
 
   ConversationTable:
     Type: AWS::DynamoDB::Table

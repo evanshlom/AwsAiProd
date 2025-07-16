@@ -8,3 +8,6 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Deployed API Endpoint URL
+test_chat/.env
