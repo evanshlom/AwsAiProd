@@ -22,7 +22,23 @@ def lambda_handler(event, context):
         stack_status = stacks['Stacks'][0]['StackStatus']
         stack_exists = True
         
-        if stack_status in ['ROLLBACK_COMPLETE', 'ROLLBACK_FAILED']:
+        # Handle stacks that are stuck or in progress
+        if stack_status in ['UPDATE_IN_PROGRESS', 'CREATE_IN_PROGRESS']:
+            print(f"Stack is {stack_status}, waiting for completion...")
+            try:
+                if 'UPDATE' in stack_status:
+                    waiter = cf.get_waiter('stack_update_complete')
+                else:
+                    waiter = cf.get_waiter('stack_create_complete')
+                waiter.wait(StackName=stack_name, WaiterConfig={'Delay': 30, 'MaxAttempts': 10})
+            except:
+                # If waiting fails, delete and recreate
+                print("Wait failed, deleting stuck stack...")
+                cf.delete_stack(StackName=stack_name)
+                time.sleep(60)
+                stack_exists = False
+        
+        if stack_status in ['ROLLBACK_COMPLETE', 'ROLLBACK_FAILED', 'DELETE_FAILED', 'UPDATE_ROLLBACK_COMPLETE']:
             # Delete the failed stack
             cf.delete_stack(StackName=stack_name)
             # Wait for deletion
